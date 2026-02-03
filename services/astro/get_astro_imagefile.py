@@ -1,70 +1,297 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import astropy.units as u
+from astropy.time import Time
+from astropy.coordinates import AltAz, SkyCoord, EarthLocation, Galactic
+from matplotlib.patches import Circle
+from .constellations import CONSTELLATION_LINES, CONSTELLATION_NAMES
 
-def generateImageFromCord(az_list, alt_list, width, height):
-    # Converter para radianos
+MAG_LIMIT = 5.8
+
+# ======================================================
+# UTIL: HIPs USADOS EM CONSTELAÇÕES
+# ======================================================
+def get_constellation_hips():
+    hips = set()
+    for connections in CONSTELLATION_LINES.values():
+        for h1, h2 in connections:
+            hips.add(int(h1))
+            hips.add(int(h2))
+    return hips
+
+
+# ======================================================
+# IMAGEM PRINCIPAL
+# ======================================================
+def generateImageFromCord(
+    az_list,
+    alt_list,
+    width: float,
+    height: float,
+    loc: EarthLocation,
+    time: Time,
+    has_constellation_lines: bool,
+    mag_list=None,
+    hip_list=None
+):
+
     az = az_list.to(u.rad).value
     alt = alt_list.to(u.rad).value
-    
-    # Projeção estereográfica
-    r = np.tan((np.pi/2 - alt)/2)
-    
-    # Normalize so horizon is at radius 1
-    max_r = np.tan(np.pi/4)  # = 1.0
-    r = r / max_r
-    
-    # Coordenadas cartesianas
+
+    r = np.tan((np.pi / 2 - alt) / 2)
+    r /= np.tan(np.pi / 4)
+
     x = r * np.sin(az)
     y = r * np.cos(az)
-    
-    # DEBUG: Check if data is valid
-    print(f"Number of stars: {len(x)}")
-    print(f"x range: [{np.min(x):.3f}, {np.max(x):.3f}]")
-    print(f"y range: [{np.min(y):.3f}, {np.max(y):.3f}]")
-    print(f"r range: [{np.min(r):.3f}, {np.max(r):.3f}]")
-    print(f"alt range (degrees): [{np.min(alt)*180/np.pi:.1f}, {np.max(alt)*180/np.pi:.1f}]")
-    
-    # If stars are still off-center, you might need to center them manually
-    # This centers the distribution by subtracting the centroid
-    centroid_x, centroid_y = np.mean(x), np.mean(y)
-    print(f"Centroid before centering: ({centroid_x:.3f}, {centroid_y:.3f})")
-    
-    # Only apply centering if it's significantly off-center
-    if abs(centroid_x) > 0.1 or abs(centroid_y) > 0.1:
-        x = x - centroid_x
-        y = y - centroid_y
-        
-        # After centering, we need to ensure all points are within the circle
-        # by rescaling if necessary
-        distances = np.sqrt(x**2 + y**2)
-        max_distance = np.max(distances)
-        if max_distance > 1.0:
-            x = x / max_distance
-            y = y / max_distance
-    
-    # Create figure
-    fig, ax = plt.subplots(figsize=(width, height), dpi=100)
-    ax.scatter(x, y, s=1, color="white", alpha=0.8)
-    
-    # Draw horizon circle
-    circle = plt.Circle((0, 0), 1, fill=False, color='gray', linestyle='--', alpha=0.3, linewidth=0.5)
-    ax.add_artist(circle)
-    
-    # Mark the cardinal directions
-    ax.text(0, 1.05, 'N', ha='center', va='bottom', color='gray', fontsize=8)
-    ax.text(0, -1.05, 'S', ha='center', va='top', color='gray', fontsize=8)
-    ax.text(1.05, 0, 'E', ha='left', va='center', color='gray', fontsize=8)
-    ax.text(-1.05, 0, 'W', ha='right', va='center', color='gray', fontsize=8)
-    
-    # Limites do círculo
+
+    # ==================================================
+    # FILTRO DE POLUIÇÃO VISUAL
+    # ==================================================
+    if mag_list is not None and hip_list is not None:
+        constellation_hips = get_constellation_hips()
+
+        hip_arr = np.array(hip_list, dtype=int)
+        mag_arr = np.array(mag_list)
+
+        bright_mask = mag_arr <= MAG_LIMIT
+        constellation_mask = np.isin(hip_arr, list(constellation_hips))
+        mask = bright_mask | constellation_mask
+
+        x = x[mask]
+        y = y[mask]
+        alt_list = alt_list[mask]
+        mag_list = mag_arr[mask]
+        hip_list = hip_arr[mask]
+
+    # ==================================================
+    # FIGURA
+    # ==================================================
+    fig, ax = plt.subplots(figsize=(width, height), dpi=200, facecolor='black')
+
+    draw_milky_way(ax, time, loc)
+    draw_equatorial_grid(ax, time, loc)
+
+    # ==================================================
+    # ESTRELAS (BRILHO AUMENTADO)
+    # ==================================================
+    # ==================================================
+# ESTRELAS (FRACAS REALÇADAS)
+# ==================================================
+    if mag_list is not None:
+        base_mag = np.min(mag_list)
+
+        # Curva MAIS SUAVE → favorece estrelas fracas
+        sizes = 90 * np.exp(-0.45 * (mag_list - base_mag))
+        sizes = np.clip(sizes, 2.5, 120)
+
+        # Identifica estrelas fracas (ex: mag > 3)
+        faint_mask = mag_list > (base_mag + 2.5)
+
+        constellation_hips = get_constellation_hips()
+        is_constellation_star = np.isin(hip_list, list(constellation_hips))
+        sizes[is_constellation_star] *= 1.25
+
+        # =========================
+        # HALO DIFERENCIADO
+        # =========================
+        halo_alpha = np.where(faint_mask, 0.16, 0.08)
+        halo_size = np.where(faint_mask, sizes * 4.8, sizes * 3.5)
+
+        ax.scatter(
+            x, y,
+            s=halo_size,
+            color=(0.92, 0.92, 0.92),
+            alpha=halo_alpha,
+            edgecolors="none",
+            zorder=2
+        )
+
+        # =========================
+        # NÚCLEO
+        # =========================
+        core_alpha = np.where(faint_mask, 0.85, 0.95)
+
+        ax.scatter(
+            x, y,
+            s=sizes,
+            color="white",
+            alpha=core_alpha,
+            edgecolors="none",
+            zorder=3
+        )
+
+
+    # ==================================================
+    # CONSTELAÇÕES
+    # ==================================================
+    if has_constellation_lines:
+        draw_constellation_lines(ax, x, y, hip_numbers=hip_list, alt_rad=alt_list)
+
+    # ==================================================
+    # CARDINAIS
+    # ==================================================
+    ax.text(0, 1.08, 'N', ha='center', va='bottom',
+            color='white', fontsize=10, alpha=0.75, fontweight='bold')
+    ax.text(0, -1.08, 'S', ha='center', va='top',
+            color='white', fontsize=10, alpha=0.75, fontweight='bold')
+    ax.text(1.08, 0, 'L', ha='left', va='center',
+            color='white', fontsize=10, alpha=0.75, fontweight='bold')
+    ax.text(-1.08, 0, 'O', ha='right', va='center',
+            color='white', fontsize=10, alpha=0.75, fontweight='bold')
+
+    # ==================================================
+    # HORIZONTE
+    # ==================================================
+    ax.add_patch(
+        Circle(
+            (0, 0), 1,
+            facecolor='none',
+            edgecolor='white',
+            alpha=0.3,
+            linewidth=1.6
+        )
+    )
+
     ax.set_xlim(-1.1, 1.1)
     ax.set_ylim(-1.1, 1.1)
     ax.set_aspect('equal')
-    ax.set_facecolor("black")
     ax.axis('off')
-    
-    # Salvar imagens
-    fig.savefig("ceu_constelacoes.jpg", dpi=300, facecolor="black", bbox_inches='tight', pad_inches=0)
-    fig.savefig("ceu_constelacoes.tif", dpi=300, format="tiff", facecolor="black", bbox_inches='tight', pad_inches=0)
+
+    fig.savefig("ceu_constelacoes.jpg", dpi=400,
+                facecolor="black", bbox_inches='tight', pad_inches=0.05)
+    fig.savefig("ceu_constelacoes.tif", dpi=400, format="tiff",
+                facecolor="black", bbox_inches='tight', pad_inches=0.05)
+
     plt.close(fig)
+
+
+# ======================================================
+# CONSTELAÇÕES
+# ======================================================
+def draw_constellation_lines(ax, x_coords, y_coords, hip_numbers=None, alt_rad=None):
+    if hip_numbers is None or len(hip_numbers) == 0:
+        return
+
+    hip_to_index = {int(h): i for i, h in enumerate(hip_numbers)}
+
+    for connections in CONSTELLATION_LINES.values():
+        for h1, h2 in connections:
+            if h1 in hip_to_index and h2 in hip_to_index:
+                i1 = hip_to_index[h1]
+                i2 = hip_to_index[h2]
+
+                alt_vals = alt_rad.to(u.rad).value
+                if alt_vals[i1] < np.radians(5) or alt_vals[i2] < np.radians(5):
+                    continue
+
+                ax.plot(
+                    [x_coords[i1], x_coords[i2]],
+                    [y_coords[i1], y_coords[i2]],
+                    color='white',
+                    alpha=0.7,
+                    linewidth=1.4,
+                    zorder=4
+                )
+
+
+# ======================================================
+# VIA LÁCTEA (CINZA GEOMÉTRICO)
+# ======================================================
+def draw_milky_way(ax, time, location):
+    l_vals = np.linspace(0, 360, 2600) * u.deg
+    b_vals = np.linspace(-10, 10, 50) * u.deg
+
+    L, B = np.meshgrid(l_vals, b_vals)
+    gal = SkyCoord(l=L.flatten(), b=B.flatten(), frame=Galactic)
+
+    altaz = gal.transform_to(AltAz(obstime=time, location=location))
+    visible = altaz.alt > 0 * u.deg
+
+    alt = altaz.alt[visible].to(u.rad).value
+    az = altaz.az[visible].to(u.rad).value
+    b_vis = B.flatten()[visible].value
+
+    r = np.tan((np.pi / 2 - alt) / 2)
+    r /= np.tan(np.pi / 4)
+
+    x = r * np.sin(az)
+    y = r * np.cos(az)
+
+    alpha_vals = 0.04 + 0.10 * np.exp(-np.abs(b_vis) / 3.5)
+
+    ax.scatter(
+        x, y,
+        s=8,
+        color=(0.59, 0.59, 0.59),  # cinza geométrico
+        alpha=alpha_vals,
+        zorder=1
+    )
+
+
+# ======================================================
+# GRADE EQUATORIAL
+# ======================================================
+def draw_equatorial_grid(ax, time, location):
+    grid_color = (0.7, 0.7, 0.7)
+    grid_alpha = 0.25
+    lw = 0.6
+
+    ra_lines = np.arange(0, 360, 15) * u.deg
+    dec_vals = np.linspace(-90, 90, 600) * u.deg
+
+    for ra in ra_lines:
+        coords = SkyCoord(
+            ra=np.full_like(dec_vals.value, ra.value) * u.deg,
+            dec=dec_vals,
+            frame="icrs"
+        )
+
+        altaz = coords.transform_to(AltAz(obstime=time, location=location))
+        mask = altaz.alt > 0 * u.deg
+        if np.sum(mask) < 2:
+            continue
+
+        alt = altaz.alt[mask].to(u.rad).value
+        az = altaz.az[mask].to(u.rad).value
+
+        r = np.tan((np.pi / 2 - alt) / 2)
+        r /= np.tan(np.pi / 4)
+
+        ax.plot(
+            r * np.sin(az),
+            r * np.cos(az),
+            color=grid_color,
+            alpha=grid_alpha,
+            linewidth=lw,
+            zorder=0
+        )
+
+    dec_lines = np.arange(-60, 90, 15) * u.deg
+    ra_vals = np.linspace(0, 360, 800) * u.deg
+
+    for dec in dec_lines:
+        coords = SkyCoord(
+            ra=ra_vals,
+            dec=np.full_like(ra_vals.value, dec.value) * u.deg,
+            frame="icrs"
+        )
+
+        altaz = coords.transform_to(AltAz(obstime=time, location=location))
+        mask = altaz.alt > 0 * u.deg
+        if np.sum(mask) < 2:
+            continue
+
+        alt = altaz.alt[mask].to(u.rad).value
+        az = altaz.az[mask].to(u.rad).value
+
+        r = np.tan((np.pi / 2 - alt) / 2)
+        r /= np.tan(np.pi / 4)
+
+        ax.plot(
+            r * np.sin(az),
+            r * np.cos(az),
+            color=grid_color,
+            alpha=grid_alpha,
+            linewidth=lw,
+            zorder=0
+        )

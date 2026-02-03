@@ -5,13 +5,13 @@ class ImageDTO(BaseModel):
     # inches
     width: float
     height: float
+    has_constellation_lines: bool
 
 class AstroDTO(BaseModel):
     lat: float
     lon: float
     # in meters
     alt: float
-    dateTime: datetime
-    referenceStar: str
+    date_time: datetime
 
     image: ImageDTO
