@@ -2,9 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import astropy.units as u
 from astropy.time import Time
-from astropy.coordinates import AltAz, SkyCoord, EarthLocation, Galactic
+from astropy.coordinates import AltAz, SkyCoord, EarthLocation
+from scipy.ndimage import gaussian_filter
 from matplotlib.patches import Circle
-from .constellations import CONSTELLATION_LINES, CONSTELLATION_NAMES
+from const.constellations import CONSTELLATION_LINES, CONSTELLATION_NAMES
 
 MAG_LIMIT = 5.8
 
@@ -31,6 +32,7 @@ def generateImageFromCord(
     loc: EarthLocation,
     time: Time,
     has_constellation_lines: bool,
+    has_equatorial_line: bool,
     mag_list=None,
     hip_list=None
 ):
@@ -68,15 +70,17 @@ def generateImageFromCord(
     # ==================================================
     fig, ax = plt.subplots(figsize=(width, height), dpi=200, facecolor='black')
 
+    if(has_equatorial_line):
+        draw_equatorial_grid(ax, time, loc)
+
     draw_milky_way(ax, time, loc)
-    draw_equatorial_grid(ax, time, loc)
 
     # ==================================================
     # ESTRELAS (BRILHO AUMENTADO)
     # ==================================================
     # ==================================================
-# ESTRELAS (FRACAS REALÇADAS)
-# ==================================================
+    # ESTRELAS (FRACAS REALÇADAS)
+    # ==================================================
     if mag_list is not None:
         base_mag = np.min(mag_list)
 
@@ -89,7 +93,7 @@ def generateImageFromCord(
 
         constellation_hips = get_constellation_hips()
         is_constellation_star = np.isin(hip_list, list(constellation_hips))
-        sizes[is_constellation_star] *= 1.25
+        sizes[is_constellation_star] *= 1.5
 
         # =========================
         # HALO DIFERENCIADO
@@ -181,7 +185,7 @@ def draw_constellation_lines(ax, x_coords, y_coords, hip_numbers=None, alt_rad=N
                 i2 = hip_to_index[h2]
 
                 alt_vals = alt_rad.to(u.rad).value
-                if alt_vals[i1] < np.radians(5) or alt_vals[i2] < np.radians(5):
+                if alt_vals[i1] < np.radians(-5) or alt_vals[i2] < np.radians(-5):
                     continue
 
                 ax.plot(
@@ -193,39 +197,6 @@ def draw_constellation_lines(ax, x_coords, y_coords, hip_numbers=None, alt_rad=N
                     zorder=4
                 )
 
-
-# ======================================================
-# VIA LÁCTEA (CINZA GEOMÉTRICO)
-# ======================================================
-def draw_milky_way(ax, time, location):
-    l_vals = np.linspace(0, 360, 2600) * u.deg
-    b_vals = np.linspace(-10, 10, 50) * u.deg
-
-    L, B = np.meshgrid(l_vals, b_vals)
-    gal = SkyCoord(l=L.flatten(), b=B.flatten(), frame=Galactic)
-
-    altaz = gal.transform_to(AltAz(obstime=time, location=location))
-    visible = altaz.alt > 0 * u.deg
-
-    alt = altaz.alt[visible].to(u.rad).value
-    az = altaz.az[visible].to(u.rad).value
-    b_vis = B.flatten()[visible].value
-
-    r = np.tan((np.pi / 2 - alt) / 2)
-    r /= np.tan(np.pi / 4)
-
-    x = r * np.sin(az)
-    y = r * np.cos(az)
-
-    alpha_vals = 0.04 + 0.10 * np.exp(-np.abs(b_vis) / 3.5)
-
-    ax.scatter(
-        x, y,
-        s=8,
-        color=(0.59, 0.59, 0.59),  # cinza geométrico
-        alpha=alpha_vals,
-        zorder=1
-    )
 
 
 # ======================================================
@@ -295,3 +266,68 @@ def draw_equatorial_grid(ax, time, location):
             linewidth=lw,
             zorder=0
         )
+
+def draw_milky_way(ax, time, loc, resolution=500):
+    # =========================
+    # GRID (imagem)
+    # =========================
+    img = np.zeros((resolution, resolution))
+
+    # =========================
+    # GERAR PONTOS GALÁCTICOS
+    # =========================
+    n_points = 80000
+
+    l = np.random.uniform(0, 360, n_points) * u.deg
+    b = np.random.normal(0, 8, n_points) * u.deg  # largura da banda
+
+    gal = SkyCoord(l=l, b=b, frame="galactic")
+
+    altaz = gal.transform_to(AltAz(obstime=time, location=loc))
+
+    mask = altaz.alt > 0 * u.deg
+    if np.sum(mask) < 10:
+        return
+
+    alt = altaz.alt[mask].to(u.rad).value
+    az = altaz.az[mask].to(u.rad).value
+
+    # =========================
+    # SUA PROJEÇÃO
+    # =========================
+    r = np.tan((np.pi / 2 - alt) / 2)
+    r /= np.tan(np.pi / 4)
+
+    x = r * np.sin(az)
+    y = r * np.cos(az)
+
+    # =========================
+    # MAPEAR PARA PIXEL
+    # =========================
+    xi = ((x + 1) / 2 * (resolution - 1)).astype(int)
+    yi = ((y + 1) / 2 * (resolution - 1)).astype(int)
+
+    valid = (xi >= 0) & (xi < resolution) & (yi >= 0) & (yi < resolution)
+
+    img[yi[valid], xi[valid]] += 1
+
+    # =========================
+    # SUAVIZAR → vira "nuvem"
+    # =========================
+    img = gaussian_filter(img, sigma=6)
+
+    # normalizar
+    img = img / img.max()
+
+    # =========================
+    # DESENHAR
+    # =========================
+    ax.imshow(
+        img,
+        extent=[-1, 1, -1, 1],
+        origin="lower",
+        cmap="gray",
+        alpha=0.25,
+        zorder=0
+    )
+

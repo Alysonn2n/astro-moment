@@ -24,6 +24,7 @@ def createAstroMoment(astro_dto: AstroDTO):
         loc,
         time,
         astro_dto.image.has_constellation_lines,
+        astro_dto.image.has_equatorial_lines,
         mag_visible,
         all_hip_stars
     )
