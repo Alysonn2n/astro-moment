@@ -40,7 +40,7 @@ docker run -p 8000:8000 astro-moment
 ## Uso
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+fastapi dev
 ```
 
 ### POST /astro-moment/
