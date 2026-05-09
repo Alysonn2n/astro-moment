@@ -2,10 +2,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import astropy.units as u
 from astropy.time import Time
-from astropy.coordinates import AltAz, SkyCoord, EarthLocation
+from astropy.coordinates import AltAz, SkyCoord, EarthLocation, get_body, get_sun
 from scipy.ndimage import gaussian_filter
 from matplotlib.patches import Circle
-from const.constellations import CONSTELLATION_LINES, CONSTELLATION_NAMES
+from const.constellations import CONSTELLATION_LINES
+from const.solar_system_bodies import SOLAR_SYSTEM_BODIES;
 
 MAG_LIMIT = 5.8
 
@@ -33,6 +34,7 @@ def generateImageFromCord(
     time: Time,
     has_constellation_lines: bool,
     has_equatorial_line: bool,
+    has_solar_system_bodies: bool,
     mag_list=None,
     hip_list=None
 ):
@@ -72,6 +74,9 @@ def generateImageFromCord(
 
     if(has_equatorial_line):
         draw_equatorial_grid(ax, time, loc)
+
+    if(has_solar_system_bodies): 
+        draw_solar_system(ax, time, loc)
 
     draw_milky_way(ax, time, loc)
 
@@ -327,7 +332,82 @@ def draw_milky_way(ax, time, loc, resolution=500):
         extent=[-1, 1, -1, 1],
         origin="lower",
         cmap="gray",
-        alpha=0.25,
+        alpha=0.1,
         zorder=0
     )
 
+
+# ======================================================
+# SOL E PLANETAS
+# ======================================================
+def draw_solar_system(ax, time, loc):
+
+    bodies = []
+
+    for name, body_name, color, size in SOLAR_SYSTEM_BODIES:
+
+        # =========================
+        # SOL
+        # =========================
+        if body_name == "sun":
+            body = get_sun(time)
+
+        if(body_name == "moon"):
+            body = get_body("moon", time, loc)
+
+        # =========================
+        # PLANETAS
+        # =========================
+        else:
+            body = get_body(body_name, time, loc)
+
+        body = body.transform_to(
+            AltAz(obstime=time, location=loc)
+        )
+
+        bodies.append({
+            "name": name,
+            "coord": body,
+            "color": color,
+            "size": size
+        })
+
+    # =========================
+    # DESENHO
+    # =========================
+    for body in bodies:
+
+        alt = body["coord"].alt
+        az = body["coord"].az
+
+        if alt < 0 * u.deg:
+            continue
+
+        alt_rad = alt.to(u.rad).value
+        az_rad = az.to(u.rad).value
+
+        r = np.tan((np.pi / 2 - alt_rad) / 2)
+        r /= np.tan(np.pi / 4)
+
+        x = r * np.sin(az_rad)
+        y = r * np.cos(az_rad)
+
+        ax.scatter(
+            x,
+            y,
+            s=body["size"] * 5,
+            color=body["color"],
+            alpha=0.12,
+            edgecolors="none",
+            zorder=6
+        )
+
+        ax.scatter(
+            x,
+            y,
+            s=body["size"],
+            color=body["color"],
+            edgecolors="white",
+            linewidths=0.5,
+            zorder=7
+        )

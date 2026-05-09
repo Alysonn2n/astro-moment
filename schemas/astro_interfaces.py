@@ -7,6 +7,7 @@ class ImageDTO(BaseModel):
     height: float
     has_constellation_lines: bool
     has_equatorial_lines: bool
+    has_solar_system_bodies: bool
 
 class AstroDTO(BaseModel):
     lat: float
