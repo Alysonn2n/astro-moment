@@ -1,27 +1,27 @@
 # Astro Moment
 
-API que gera imagens do céu estelar com base em coordenadas geográficas e data/hora, utilizando projeção estereográfica azimutal.
+API that generates star sky images based on geographic coordinates and date/time, using azimuthal stereographic projection
 
-## Exemplo
+## Example
 
-![Céu estelar](ceu_constelacoes.jpg)
+![Star sky](ceu_constelacoes.jpg)
 
-## Funcionalidades
+## Features
 
-- Renderização do céu visível a partir de qualquer ponto da Terra em qualquer momento
-- Linhas de constelações (catálogo Hipparcos via Vizier)
-- Grade equatorial (ascensão reta e declinação)
-- Corpos do sistema solar (Sol, Lua e planetas)
-- Via Láctea (simulação gaussiana)
-- Exportação em JPG e TIFF (alta resolução)
+- Rendering of the visible sky from any point on Earth at any time
+- Constellation lines (Hipparcos catalog via Vizier)
+- Equatorial grid (right ascension and declination)
+- Solar system bodies (Sun, Moon and planets)
+- Milky Way (Gaussian simulation)
+- Export in JPG and TIFF (high resolution)
 
-## Tecnologias
+## Technologies
 
 - Python / FastAPI
-- Astropy + Astroquery (catálogo Hipparcos I/239)
+- Astropy + Astroquery (Hipparcos catalog I/239)
 - Matplotlib / NumPy / SciPy
 
-## Instalação
+## Installation
 
 ```bash
 pip install "fastapi[standard]"
@@ -30,14 +30,14 @@ pip install -U --pre "astroquery"
 pip install matplotlib scipy numpy
 ```
 
-Ou via Docker:
+Or via Docker:
 
 ```bash
 docker build -t astro-moment .
 docker run -p 8000:8000 astro-moment
 ```
 
-## Uso
+## Usage
 
 ```bash
 fastapi dev
@@ -45,7 +45,7 @@ fastapi dev
 
 ### POST /astro-moment/
 
-Gera a imagem do céu estelar.
+Generates the star sky image.
 
 **Request body:**
 
@@ -65,38 +65,38 @@ Gera a imagem do céu estelar.
 }
 ```
 
-**Parâmetros:**
+**Parameters:**
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| lat | float | Latitude em graus |
-| lon | float | Longitude em graus |
-| alt | float | Altitude em metros |
-| date_time | datetime | Data e hora (UTC) |
-| image.width | float | Largura da imagem (polegadas) |
-| image.height | float | Altura da imagem (polegadas) |
-| image.has_constellation_lines | bool | Desenhar linhas de constelações |
-| image.has_equatorial_lines | bool | Desenhar grade equatorial |
-| image.has_solar_system_bodies | bool | Desenhar Sol, Lua e planetas |
+| Field | Type | Description |
+|-------|------|-------------|
+| lat | float | Latitude in degrees |
+| lon | float | Longitude in degrees |
+| alt | float | Altitude in meters |
+| date_time | datetime | Date and time (UTC) |
+| image.width | float | Image width (inches) |
+| image.height | float | Image height (inches) |
+| image.has_constellation_lines | bool | Draw constellation lines |
+| image.has_equatorial_lines | bool | Draw equatorial grid |
+| image.has_solar_system_bodies | bool | Draw Sun, Moon and planets |
 
-**Resposta (200):**
+**Response (200):**
 
 ```json
 {
-  "message": "Imagem do céu estelar gerada com sucesso",
+  "message": "Star sky image generated successfully",
   "files": ["ceu_constelacoes.jpg", "ceu_constelacoes.tif"],
   "status": "success"
 }
 ```
 
-## Estrutura
+## Structure
 
 ```
 astro-moment/
-├── main.py                  # Entrypoint FastAPI
-├── controllers/             # Rotas
+├── main.py                  # FastAPI entrypoint
+├── controllers/             # Routes
 ├── schemas/                 # DTOs (Pydantic)
-├── services/astro/          # Lógica de geração
-├── const/                   # Constelações e corpos celestes
+├── services/astro/          # Generation logic
+├── const/                   # Constellations and celestial bodies
 └── dockerfile
 ```
