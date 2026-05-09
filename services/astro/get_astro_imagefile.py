@@ -137,18 +137,6 @@ def generateImageFromCord(
         draw_constellation_lines(ax, x, y, hip_numbers=hip_list, alt_rad=alt_list)
 
     # ==================================================
-    # CARDINAIS
-    # ==================================================
-    ax.text(0, 1.08, 'N', ha='center', va='bottom',
-            color='white', fontsize=10, alpha=0.75, fontweight='bold')
-    ax.text(0, -1.08, 'S', ha='center', va='top',
-            color='white', fontsize=10, alpha=0.75, fontweight='bold')
-    ax.text(1.08, 0, 'L', ha='left', va='center',
-            color='white', fontsize=10, alpha=0.75, fontweight='bold')
-    ax.text(-1.08, 0, 'O', ha='right', va='center',
-            color='white', fontsize=10, alpha=0.75, fontweight='bold')
-
-    # ==================================================
     # HORIZONTE
     # ==================================================
     ax.add_patch(
